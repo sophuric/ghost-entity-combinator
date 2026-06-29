@@ -1,0 +1,11 @@
+{
+  "name": "ghost-entity-combinator",
+  "version": "0.1.0",
+  "author": "sophur",
+  "title": "Ghost Entity Combinator",
+  "factorio_version": "2.0",
+  "dependencies": [
+    "base >= 2.0"
+  ],
+  "description": "Outputs ghost entities and tiles in the logistic network as a signal"
+}

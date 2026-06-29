@@ -5,9 +5,16 @@ local function update_combinator(entity)
 		return
 	end
 
+	local control = entity.get_or_create_control_behavior()
+	if not control then
+		return
+	end
+
+	entity.operable = false -- prevent player from opening its GUI
+	control.enabled = true
+
 	-- set signal/logistic sections of ghost entity combinator control
 
-	local control = entity.get_or_create_control_behavior()
 	-- ensure there is only one section
 	while control.sections_count > 1 do
 		control.remove_section(2)
@@ -187,13 +194,14 @@ script.on_init(scan_all)
 -- commands.add_command("scan_all", nil, scan_all)
 
 local function add_logistic_cell(entity)
-	if entity.logistic_cell then
-		scan_entities()
-		script.register_on_object_destroyed(entity.logistic_cell)
-		local network = entity.logistic_cell.logistic_network
-		if network then
-			script.register_on_object_destroyed(network)
-		end
+	if not entity or not entity.valid or not entity.logistic_cell then
+		return
+	end
+	scan_entities()
+	script.register_on_object_destroyed(entity.logistic_cell)
+	local network = entity.logistic_cell.logistic_network
+	if network then
+		script.register_on_object_destroyed(network)
 	end
 end
 

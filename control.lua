@@ -1,6 +1,48 @@
 local c = require("constant")
 
-local function update_combinator(entity)
+local function get_ghost_signals(n_id, update)
+	if not n_id then
+		return
+	end
+	if not update and storage.ghost_signals[n_id] then
+		-- don't regenerate signals here
+		return storage.ghost_signals[n_id]
+	end
+
+	local ghosts = storage.logistic_ghosts[n_id]
+	if not ghosts then
+		storage.ghost_signals[n_id] = nil
+		return
+	end
+	local signals = {}
+	-- loop through each ghost
+	for _, ghost in pairs(ghosts) do
+		if ghost and ghost.valid then
+			-- get the item and quality from it
+			local quality = ghost.quality
+			local entity = ghost.ghost_prototype
+
+			local items = entity.items_to_place_this
+			if items and #items >= 1 then
+				-- unique key for this item and quality,
+				-- so we don't have duplicate signals.
+				-- I don't think this really matters tbh
+				local item = items[1]
+				local key = "item_" .. quality.name .. "_" .. item.name
+				if signals[key] == nil then
+					signals[key] = { min = 0, value = { quality = quality, name = item.name } }
+				end
+				-- min is the quantity
+				signals[key].min = signals[key].min + item.count
+			end
+		end
+	end
+
+	storage.ghost_signals[n_id] = signals
+	return signals
+end
+
+local function update_combinator(entity, signals)
 	if not entity or not entity.valid then
 		return
 	end
@@ -32,54 +74,23 @@ local function update_combinator(entity)
 	section.active = true
 	section.multiplier = 1
 
-	-- loop through each ghost
-	local signals = {}
-	local e_id = entity.unit_number
-	local n_id = storage.combinator_logistic_network[e_id]
-	if n_id then
-		local ghosts = storage.logistic_ghosts[n_id]
-		if ghosts then
-			for _, ghost in pairs(ghosts) do
-				if ghost and ghost.valid then
-					-- get the item and quality from it
-					local quality = ghost.quality
-					local entity = ghost.ghost_prototype
-
-					local items = entity.items_to_place_this
-					if items and #items >= 1 then
-						-- unique key for this item and quality,
-						-- so we don't have duplicate signals.
-						-- I don't think this really matters tbh
-						local item = items[1]
-						local key = "item_" .. quality.name .. "_" .. item.name
-						if signals[key] == nil then
-							signals[key] = { count = 0, quality = quality, name = item.name }
-						end
-						signals[key].count = signals[key].count + item.count
-					end
-				end
-			end
-		end
+	if not signals then
+		local e_id = entity.unit_number
+		local n_id = storage.combinator_logistic_network[e_id]
+		signals = get_ghost_signals(n_id) or {}
 	end
 
-	-- actually write those signals into the combinator
-	local filters = {}
-	for _, signal in pairs(signals) do
-		table.insert(filters, {
-			min = signal.count,
-			value = signal,
-		})
-	end
-	section.filters = filters
+	section.filters = signals
 end
 
-local function update_combinators_in_network(n_id)
+local function update_combinators_in_network(n_id, update)
 	local combinators = storage.logistic_combinators[n_id]
 	if not combinators then
 		return
 	end
+	local signals = get_ghost_signals(n_id, update)
 	for e_id, entity in pairs(combinators) do
-		update_combinator(entity)
+		update_combinator(entity, signals)
 	end
 end
 
@@ -118,7 +129,7 @@ local function add_ghost(entity, register_network)
 		storage.logistic_ghosts[n_id][e_id] = entity
 		storage.ghost_logistic_networks[e_id][n_id] = true
 
-		update_combinators_in_network(n_id)
+		update_combinators_in_network(n_id, true)
 	end
 end
 
@@ -156,6 +167,7 @@ local function scan_entities()
 	storage.ghost_logistic_networks = {}
 	storage.logistic_combinators = {}
 	storage.combinator_logistic_network = {}
+	storage.ghost_signals = {}
 
 	for _, surface in pairs(game.surfaces) do
 		for _, ghosts in pairs({
@@ -191,7 +203,7 @@ local function scan_all()
 end
 
 script.on_init(scan_all)
--- commands.add_command("scan_all", nil, scan_all)
+commands.add_command("scan_all", nil, scan_all)
 
 local function add_logistic_cell(entity)
 	if not entity or not entity.valid or not entity.logistic_cell then
@@ -240,7 +252,7 @@ script.on_event(defines.events.on_object_destroyed, function(event)
 			for n_id, _ in pairs(networks) do
 				if storage.logistic_ghosts[n_id] then
 					storage.logistic_ghosts[n_id][e_id] = nil
-					update_combinators_in_network(n_id)
+					update_combinators_in_network(n_id, true)
 				end
 			end
 		end
